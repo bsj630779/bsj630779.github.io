@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<title>오늘 뭐 먹지? · 주변 맛집 추천</title>
+
+<!-- Leaflet (지도) — 인터넷 연결 시에만 동작. 없어도 목록 추천은 정상 -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- 자동 생성 데이터: window.RESTAURANT_DATA -->
+<script src="data.js"></script>
+
+<style>
+  :root {
+    --bg: #e9e8e5; --surface: #ffffff; --surface2: #f4f3f0;
+    --ink: #15120f; --muted: #8b8780; --line: #e3e1dc;
+    --gold: #b08d57; --gold2: #c9a86a; --good: #5b8c6e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Helvetica Neue", "Pretendard", -apple-system, "Malgun Gothic", Arial, sans-serif;
+    background: var(--bg); color: var(--ink); min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 22px 40px; }
+
+  /* ---- 네비게이션 ---- */
+  .nav {
+    max-width: 1180px; margin: 0 auto; padding: 22px 26px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { font-weight: 800; font-size: 19px; letter-spacing: 1px; }
+  .brand i { color: var(--gold); font-style: normal; }
+  .nav-links { display: flex; gap: 30px; }
+  .nav-links a {
+    color: var(--ink); text-decoration: none; font-size: 12px; letter-spacing: 1.5px;
+    text-transform: uppercase; opacity: 0.65; transition: opacity .2s;
+  }
+  .nav-links a:hover { opacity: 1; }
+  .cta {
+    border: 1px solid var(--ink); border-radius: 999px; padding: 9px 22px;
+    font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; text-decoration: none;
+    color: var(--ink); transition: all .2s;
+  }
+  .cta:hover { background: var(--ink); color: #fff; }
+
+  /* ---- 히어로 ---- */
+  .hero {
+    text-align: center; padding: 30px 20px 36px;
+    background: linear-gradient(180deg, #fbfbfa 0%, var(--bg) 100%);
+  }
+  .kicker {
+    font-size: 12px; letter-spacing: 4px; text-transform: uppercase; color: var(--gold);
+    margin-bottom: 14px;
+  }
+  .hero-title {
+    margin: 0; font-weight: 800; letter-spacing: -0.045em; line-height: 0.92;
+    font-size: clamp(46px, 11vw, 132px);
+  }
+  .hero-title b { color: var(--gold); font-weight: 800; }
+  .hero-sub { margin: 18px 0 0; color: var(--muted); font-size: 15px; letter-spacing: 0.2px; }
+
+  /* ---- 카드/패널 ---- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
+    padding: 26px; margin-bottom: 18px; box-shadow: 0 24px 60px -40px rgba(0,0,0,.25);
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; }
+  .field { flex: 1 1 200px; }
+  label.fl { display: block; font-size: 11px; letter-spacing: .5px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 7px; }
+  select, input[type=text], input[type=number] {
+    width: 100%; padding: 11px 13px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink); font-size: 14px; transition: border-color .15s;
+  }
+  select:focus, input[type=text]:focus, input[type=number]:focus {
+    outline: none; border-color: var(--gold);
+  }
+  input[type=range] { width: 100%; accent-color: var(--gold); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    user-select: none; cursor: pointer; padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--surface); font-size: 13px; color: var(--muted);
+    transition: all .15s;
+  }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+
+  .actions { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
+  button.go {
+    flex: 1; padding: 16px; border: none; border-radius: 14px; cursor: pointer;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #fff;
+    background: var(--ink); transition: background .2s;
+  }
+  button.go:hover { background: var(--gold); }
+  button.ghost {
+    padding: 11px 15px; border-radius: 12px; cursor: pointer; font-size: 13px;
+    background: var(--surface2); color: var(--ink); border: 1px solid var(--line); transition: all .15s;
+  }
+  button.ghost:hover { border-color: var(--gold); }
+  .loc-status { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+  .loc-status b { color: var(--ink); }
+  .loc-status code { background: var(--surface2); padding: 1px 6px; border-radius: 5px; }
+
+  #map { height: 320px; border-radius: 18px; margin-top: 4px; margin-bottom: 18px; display: none;
+    border: 1px solid var(--line); }
+
+  /* ---- 추천 카드 ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px,1fr)); gap: 16px; }
+  .restaurant {
+    background: var(--surface2); border: 1px solid var(--line); border-radius: 18px;
+    padding: 20px; position: relative; transition: transform .15s, box-shadow .2s;
+  }
+  .restaurant:hover { transform: translateY(-3px); box-shadow: 0 20px 40px -28px rgba(0,0,0,.35); }
+  .restaurant .rank {
+    position: absolute; top: -12px; left: -12px; width: 34px; height: 34px;
+    border-radius: 50%; display: grid; place-items: center; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, var(--gold2), var(--gold));
+    box-shadow: 0 6px 16px -6px rgba(176,141,87,.7);
+  }
+  .restaurant h3 { margin: 2px 0 8px; font-size: 19px; letter-spacing: -0.3px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: #ecebe7; color: #6f6b64; }
+  .badge.price { background: #f3ebdd; color: var(--gold); font-weight: 600; }
+  .badge.dist { background: #e8eee9; color: var(--good); }
+  .addr { font-size: 13px; color: var(--muted); margin: 6px 0 14px; min-height: 18px; line-height: 1.5; }
+  .maplinks { display: flex; gap: 8px; }
+  .maplinks a {
+    flex: 1; text-align: center; text-decoration: none; font-size: 13px; padding: 9px;
+    border-radius: 10px; border: 1px solid var(--line); color: var(--ink); background: var(--surface);
+    transition: all .15s;
+  }
+  .maplinks a:hover { border-color: var(--ink); }
+  .checklist {
+    max-height: 175px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 12px; background: var(--surface2); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .check {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink);
+    padding: 5px 11px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; background: var(--surface);
+  }
+  .check:hover { border-color: var(--line); }
+  .check input { accent-color: var(--gold); cursor: pointer; margin: 0; }
+  .check .cnt { color: var(--muted); font-size: 11px; }
+  button.ate {
+    margin-top: 12px; width: 100%; padding: 9px; border-radius: 10px; cursor: pointer; font-size: 13px;
+    background: var(--surface); color: var(--muted); border: 1px solid var(--line); transition: all .15s;
+  }
+  button.ate:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
+  button.ate:disabled { opacity: 0.7; cursor: default; color: var(--good); border-color: var(--good); }
+  .shop-chip { cursor: pointer; }
+  .empty { text-align: center; padding: 36px; color: var(--muted); }
+  .empty h3 { color: var(--ink); }
+  .note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 16px; line-height: 1.7; }
+  .disclaimer { font-size: 11px; color: #a8a49c; }
+
+  /* ---- ABOUT 섹션 ---- */
+  .about { text-align: center; padding: 40px 0 16px; }
+  .about h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; margin: 0 0 6px; }
+  .about .sub { color: var(--gold); font-size: 12px; letter-spacing: 3px; text-transform: uppercase; }
+  .about-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; text-align: left;
+  }
+  .about-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+  .about-card .n { font-size: 12px; color: var(--gold); letter-spacing: 1px; }
+  .about-card h4 { margin: 10px 0 8px; font-size: 17px; letter-spacing: -0.3px; }
+  .about-card p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+  /* ---- 푸터 ---- */
+  .foot {
+    border-top: 1px solid var(--line); margin-top: 30px;
+    padding: 28px 26px; max-width: 1180px; margin-left: auto; margin-right: auto;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+  .foot .fb { font-weight: 800; letter-spacing: 1px; }
+  .foot .fb i { color: var(--gold); font-style: normal; }
+  .foot .fl { display: flex; gap: 22px; font-size: 12px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted); }
+
+  @media (max-width: 720px) {
+    .nav-links { display: none; }
+    .about-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="brand">MUK<i>VELET</i></div>
+  <div class="nav-links">
+    <a href="#controls">추천</a>
+    <a href="#about">소개</a>
+    <a href="#about">데이터</a>
+  </div>
+  <a class="cta" href="#controls">추천 받기</a>
+</nav>
+
+<header class="hero">
+  <div class="kicker">Elevate Your Meal</div>
+  <h1 class="hero-title">오늘 뭐 먹지<b>?</b></h1>
+  <p class="hero-sub">최근 먹은 메뉴는 빼고, 예산 안에서, 가까운 맛집을 — 전국 어디서나.</p>
+</header>
+
+<div class="wrap">
+  <div class="panel" id="controls">
+    <!-- 위치 -->
+    <div class="row">
+      <div class="field">
+        <label class="fl">시 / 도</label>
+        <select id="sido"></select>
+      </div>
+      <div class="field">
+        <label class="fl">시 / 군 / 구</label>
+        <select id="sigungu"></select>
+      </div>
+      <div class="field" style="flex:0 0 auto; display:flex; align-items:flex-end;">
+        <button class="ghost" id="geoBtn">📍 현재 위치 사용</button>
+      </div>
+      <div class="field">
+        <label class="fl">반경 <b id="radiusLabel">1.0km</b></label>
+        <input type="range" id="radius" min="300" max="5000" step="100" value="1000" />
+      </div>
+    </div>
+    <div class="loc-status" id="locStatus"></div>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:16px 0;" />
+
+    <!-- 예산 / 개수 -->
+    <div class="row">
+      <div class="field">
+        <label class="fl">예산 (예상 1인 가격)</label>
+        <select id="budget">
+          <option value="0">무관</option>
+          <option value="8000">~ 8,000원 (저가)</option>
+          <option value="12000">~ 12,000원</option>
+          <option value="15000">~ 15,000원 (중가)</option>
+          <option value="20000">~ 20,000원</option>
+        </select>
+      </div>
+      <div class="field" style="flex:0 0 140px;">
+        <label class="fl">추천 개수 (1~20)</label>
+        <input type="number" id="count" min="1" max="20" value="3" />
+      </div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="fl">먹고 싶은 종류 (클릭해서 켜고 끄기)</label>
+      <div class="chips" id="cats"></div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <label class="fl">최근에 먹은 메뉴 종류 — 체크하면 추천에서 <b>제외</b></label>
+      <input type="text" id="subSearch" placeholder="메뉴 종류 검색 (예: 치킨, 카페)" style="margin-bottom:8px;" />
+      <div class="checklist" id="subList"></div>
+    </div>
+
+    <div class="actions" style="margin-top:18px;">
+      <button class="go" id="go">🍽️ 오늘 뭐 먹지?</button>
+    </div>
+  </div>
+
+  <div id="excludedWrap"></div>
+
+  <div id="map"></div>
+  <div id="results"></div>
+
+  <section class="about" id="about">
+    <div class="sub">About</div>
+    <h2>똑똑하게, 가볍게</h2>
+    <div class="about-grid">
+      <div class="about-card">
+        <div class="n">01</div>
+        <h4>전국 데이터</h4>
+        <p>소상공인시장진흥공단 상가(상권)정보 기반. 전국 12만+ 음식점을 좌표와 함께 담았습니다.</p>
+      </div>
+      <div class="about-card">
+        <div class="n">02</div>
+        <h4>맞춤 추천</h4>
+        <p>현재 위치·반경·예산·먹고 싶은 종류로 필터링하고, 원하는 개수를 채울 때까지 자동으로 범위를 넓혀 드려요.</p>
+      </div>
+      <div class="about-card">
+        <div class="n">03</div>
+        <h4>가격은 추정</h4>
+        <p>원본에 메뉴·가격이 없어 업종 기준 예상가를 보여줍니다. 실제 가격과 다를 수 있어요.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="note">
+    데이터: 소상공인시장진흥공단 상가(상권)정보 ·
+    <span class="disclaimer">가격은 업종 기반 <b>추정치</b>이며 실제와 다를 수 있습니다.</span>
+    <span class="disclaimer"> · 추천엔진 v3 (개수 자동확장)</span>
+  </div>
+</div>
+
+<footer class="foot">
+  <div class="fb">MUK<i>VELET</i></div>
+  <div class="fl">
+    <span>오늘 뭐 먹지?</span>
+    <span>KO · KR</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.restaurants) || [];
+  var REGION = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.region) || "";
+
+  var center = null;        // {lat, lon, label}
+  var map = null, markers = [];
+  var DONGS = [];           // [{name, lat, lon, n}] — 현재 위치 → 최근접 행정동 찾기용
+  var EXCLUDED_SHOPS = {};  // 최근 먹은 가게(상호명) 제외 목록 (localStorage 영속)
+
+  // ---- 유틸 ----
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371000, toRad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
+    var a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+    return Math.round(2 * R * Math.asin(Math.sqrt(a)));
+  }
+  function won(n) { return n.toLocaleString("ko-KR") + "원"; }
+  function distLabel(m) { return m >= 1000 ? (m/1000).toFixed(1) + "km" : m + "m"; }
+
+  var SG = {};        // "시도|시군구" -> {sido, sigungu, lat, lon, n}
+  var SIDO_MAP = {};  // 시도 -> [시군구 이름...]
+
+  // ---- 초기화: 시/도·시군구 목록, 카테고리 칩, 기본 중심 ----
+  function initControls() {
+    if (!DATA.length) {
+      document.getElementById("results").innerHTML =
+        '<div class="panel empty">데이터가 없습니다. 먼저 <code>python build_data.py --all</code> 를 실행해 data.js 를 생성하세요.</div>';
+      return;
+    }
+
+    // 시군구별 평균 좌표 집계
+    var agg = {};
+    DATA.forEach(function (r) {
+      var key = r.sido + "|" + r.sigungu;
+      if (!agg[key]) agg[key] = { sido: r.sido, sigungu: r.sigungu, sum_lat: 0, sum_lon: 0, n: 0 };
+      agg[key].sum_lat += r.lat; agg[key].sum_lon += r.lon; agg[key].n++;
+    });
+    DONGS = [];
+    Object.keys(agg).forEach(function (key) {
+      var e = agg[key];
+      var info = { sido: e.sido, sigungu: e.sigungu, lat: e.sum_lat/e.n, lon: e.sum_lon/e.n, n: e.n };
+      SG[key] = info;
+      (SIDO_MAP[e.sido] = SIDO_MAP[e.sido] || []).push(e.sigungu);
+      DONGS.push({ name: e.sido + " " + e.sigungu, lat: info.lat, lon: info.lon, n: e.n });
+    });
+
+    // 시/도 드롭다운
+    var sidoSel = document.getElementById("sido");
+    Object.keys(SIDO_MAP).sort().forEach(function (s) {
+      var o = document.createElement("option"); o.value = s; o.textContent = s;
+      sidoSel.appendChild(o);
+    });
+    sidoSel.addEventListener("change", function () { fillSigungu(this.value); });
+
+    document.getElementById("sigungu").addEventListener("change", function () {
+      var s = document.getElementById("sido").value;
+      setCenterBySigungu(s, this.value);
+    });
+
+    // 기본값 = 음식점이 가장 많은 시군구가 있는 시/도
+    var topKey = Object.keys(SG).sort(function (a, b) { return SG[b].n - SG[a].n; })[0];
+    sidoSel.value = SG[topKey].sido;
+    fillSigungu(SG[topKey].sido);
+    document.getElementById("sigungu").value = SG[topKey].sigungu;
+    setCenterBySigungu(SG[topKey].sido, SG[topKey].sigungu);
+
+    // 카테고리 칩 (먹고 싶은 종류 — 중분류)
+    var cats = Array.from(new Set(DATA.map(function (r) { return r.category; }))).sort();
+    var box = document.getElementById("cats");
+    cats.forEach(function (c) {
+      var el = document.createElement("span");
+      el.className = "chip on"; el.textContent = c; el.dataset.cat = c;
+      el.addEventListener("click", function () { el.classList.toggle("on"); });
+      box.appendChild(el);
+    });
+
+    // 최근에 먹은 메뉴 종류 체크리스트 (소분류) — 많은 순 정렬
+    var subCounts = {};
+    DATA.forEach(function (r) { if (r.sub) subCounts[r.sub] = (subCounts[r.sub] || 0) + 1; });
+    var subs = Object.keys(subCounts).sort(function (a, b) { return subCounts[b] - subCounts[a]; });
+    var listBox = document.getElementById("subList");
+    subs.forEach(function (s) {
+      var lab = document.createElement("label");
+      lab.className = "check"; lab.dataset.name = s;
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.value = s;
+      var cnt = document.createElement("span"); cnt.className = "cnt"; cnt.textContent = "(" + subCounts[s] + ")";
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(" " + s + " "));
+      lab.appendChild(cnt);
+      listBox.appendChild(lab);
+    });
+    document.getElementById("subSearch").addEventListener("input", function () {
+      var q = this.value.trim();
+      Array.from(listBox.children).forEach(function (lab) {
+        lab.style.display = (!q || lab.dataset.name.indexOf(q) >= 0) ? "" : "none";
+      });
+    });
+
+    // 최근 먹은 가게 제외: 저장값 복원 + 칩 렌더 + 이벤트 위임
+    loadShops();
+    renderShops();
+    document.getElementById("excludedWrap").addEventListener("click", function (e) {
+      var chip = e.target.closest(".shop-chip");
+      if (chip) removeShop(chip.dataset.shop);
+    });
+    document.getElementById("results").addEventListener("click", function (e) {
+      var b = e.target.closest("button.ate");
+      if (!b) return;
+      addShop(b.dataset.shop);
+      b.textContent = "최근 먹음으로 제외됨 ✓"; b.disabled = true;
+      var card = b.closest(".restaurant");     // 현재 화면에서도 즉시 숨김
+      if (card) { card.style.opacity = "0.45"; }
+    });
+
+    var rad = document.getElementById("radius");
+    rad.addEventListener("input", function () {
+      document.getElementById("radiusLabel").textContent = (this.value/1000).toFixed(1) + "km";
+    });
+  }
+
+  // ---- 최근 먹은 가게 (localStorage) ----
+  // 같은 상호의 다른 지점(프랜차이즈)을 구분하기 위해 '상호명 + 주소'를 키로 사용.
+  // EXCLUDED_SHOPS: { "상호주소": "표시용 상호명" }
+  function shopKey(name, address) { return name + "|#|" + (address || ""); }
+
+  function loadShops() {
+    try {
+      var obj = JSON.parse(localStorage.getItem("excludedShops_v2") || "{}");
+      Object.keys(obj).forEach(function (k) { EXCLUDED_SHOPS[k] = obj[k]; });
+    } catch (e) { /* 무시 */ }
+  }
+  function saveShops() {
+    try { localStorage.setItem("excludedShops_v2", JSON.stringify(EXCLUDED_SHOPS)); }
+    catch (e) { /* 무시 */ }
+  }
+  function addShop(key) {
+    EXCLUDED_SHOPS[key] = key.split("|#|")[0];  // 표시용 상호명
+    saveShops(); renderShops();
+  }
+  function removeShop(key) { delete EXCLUDED_SHOPS[key]; saveShops(); renderShops(); }
+  function renderShops() {
+    var keys = Object.keys(EXCLUDED_SHOPS);
+    var wrap = document.getElementById("excludedWrap");
+    if (!keys.length) { wrap.innerHTML = ""; return; }
+    var html = '<div class="panel" style="padding:12px 16px;">' +
+      '<label class="fl">최근 먹은 가게 (제외 중 ' + keys.length + ') — 칩을 클릭하면 해제</label>' +
+      '<div class="chips">';
+    keys.forEach(function (k) {
+      html += '<span class="chip on shop-chip" data-shop="' + esc(k) + '">' +
+              esc(EXCLUDED_SHOPS[k]) + ' ✕</span>';
+    });
+    wrap.innerHTML = html + '</div></div>';
+  }
+
+  function fillSigungu(sido) {
+    var sel = document.getElementById("sigungu");
+    sel.innerHTML = "";
+    (SIDO_MAP[sido] || []).slice().sort().forEach(function (g) {
+      var o = document.createElement("option");
+      o.value = g; o.textContent = g + " (" + SG[sido + "|" + g].n + "곳)";
+      sel.appendChild(o);
+    });
+  }
+
+  function setCenterBySigungu(sido, sigungu) {
+    var info = SG[sido + "|" + sigungu];
+    if (!info) return;
+    center = { lat: info.lat, lon: info.lon, label: sido + " " + sigungu };
+    document.getElementById("locStatus").innerHTML =
+      "기준 위치: <b>" + esc(sido + " " + sigungu) + "</b> (중심 기준 · 정확히 하려면 📍현재 위치)";
+  }
+
+  // ---- 현재 위치 ----
+  function setStatus(html) { document.getElementById("locStatus").innerHTML = html; }
+
+  function nearestSigungu(lat, lon) {
+    var best = null, bestD = Infinity;
+    Object.keys(SG).forEach(function (key) {
+      var e = SG[key];
+      var dist = haversine(lat, lon, e.lat, e.lon);
+      if (dist < bestD) { bestD = dist; best = e; }
+    });
+    return best ? { info: best, dist: bestD } : null;
+  }
+
+  document.getElementById("geoBtn").addEventListener("click", function () {
+    // file:// 등 비보안 컨텍스트에서는 브라우저가 위치 기능을 차단함
+    if (location.protocol === "file:" || (window.isSecureContext === false && location.hostname !== "localhost")) {
+      setStatus(
+        '⚠️ 브라우저 보안 정책상 <b>파일을 직접 열면(file://) 현재 위치를 쓸 수 없습니다.</b><br>' +
+        '아래처럼 로컬 서버로 열면 됩니다 (이 파일이 있는 web 폴더에서):<br>' +
+        '<code>python -m http.server 8000</code> → 브라우저에서 <code>http://localhost:8000</code><br>' +
+        '지금은 위의 <b>시/도·시군구</b> 목록으로 위치를 선택해 주세요.'
+      );
+      return;
+    }
+    if (!navigator.geolocation) {
+      setStatus("이 브라우저는 위치 기능을 지원하지 않습니다. 시/도·시군구를 선택해 주세요.");
+      return;
+    }
+    setStatus("📡 현재 위치 확인 중...");
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var lat = pos.coords.latitude, lon = pos.coords.longitude;
+        center = { lat: lat, lon: lon, label: "현재 위치" };
+
+        // 현재 위치에서 가장 가까운 시군구를 찾아 드롭다운도 동기화
+        var near = nearestSigungu(lat, lon);
+        var extra = "";
+        if (near) {
+          var sidoSel = document.getElementById("sido");
+          sidoSel.value = near.info.sido;
+          fillSigungu(near.info.sido);
+          document.getElementById("sigungu").value = near.info.sigungu;
+          if (near.dist > 15000) {
+            extra =
+              '<br>⚠️ 이 위치 근처(<b>' + esc(near.info.sido + " " + near.info.sigungu) +
+              '</b>)에 데이터가 약 ' + distLabel(near.dist) +
+              ' 떨어져 있어요. 데이터 밀도를 높이려면 <code>python build_data.py --all --cap 1000</code> 으로 다시 만드세요.';
+          } else {
+            extra = ' · 가까운 지역: <b>' + esc(near.info.sido + " " + near.info.sigungu) +
+                    '</b> (' + distLabel(near.dist) + ')';
+          }
+        }
+        setStatus(
+          "기준 위치: <b>📍 현재 위치</b> (" + lat.toFixed(4) + ", " + lon.toFixed(4) + ")" + extra
+        );
+      },
+      function (err) {
+        var msg = "현재 위치를 가져오지 못했습니다. 행정동을 선택해 주세요.";
+        if (err.code === 1) msg = "위치 권한이 거부되었습니다. 브라우저 주소창의 위치 아이콘에서 권한을 허용하거나, 행정동을 선택해 주세요.";
+        else if (err.code === 2) msg = "위치를 확인할 수 없습니다(신호 없음). 행정동을 선택해 주세요.";
+        else if (err.code === 3) msg = "위치 확인 시간이 초과되었습니다. 다시 시도하거나 행정동을 선택해 주세요.";
+        setStatus(msg);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
+
+  // ---- 추천 ----
+  function recommend() {
+    if (!center) { alert("기준 위치를 먼저 선택하세요."); return; }
+
+    var radius = parseInt(document.getElementById("radius").value, 10);
+    var budget = parseInt(document.getElementById("budget").value, 10);
+    var count = Math.max(1, parseInt(document.getElementById("count").value, 10) || 3);
+
+    // 먹고 싶은 종류(중분류) — 켜진 것만 포함
+    var onSet = {};
+    Array.from(document.querySelectorAll("#cats .chip.on"))
+      .forEach(function (el) { onSet[el.dataset.cat] = true; });
+
+    // 최근 먹은 메뉴 종류(소분류) — 체크된 것 제외
+    var exSubs = {};
+    Array.from(document.querySelectorAll("#subList input:checked"))
+      .forEach(function (cb) { exSubs[cb.value] = true; });
+
+    // 주어진 반경으로 거리 계산 + 필터 (반경만 바꿔 재사용)
+    function collect(rad) {
+      var out = [];
+      DATA.forEach(function (r) {
+        var d = haversine(center.lat, center.lon, r.lat, r.lon);
+        if (d > rad) return;
+        if (!onSet[r.category]) return;
+        if (budget && r.price_est > budget) return;
+        if (r.sub && exSubs[r.sub]) return;                       // 최근 먹은 메뉴 종류 제외
+        if (EXCLUDED_SHOPS[shopKey(r.name, r.address)]) return;   // 최근 먹은 가게 제외
+        out.push(Object.assign({ _dist: d }, r));
+      });
+      return out;
+    }
+
+    // 1차: 지정 반경. 후보가 요청 개수보다 적으면 반경을 점차 넓혀 채운다.
+    var cand = collect(radius);
+    var usedRadius = radius;
+    var CEIL = 20000;
+    while (cand.length < count && usedRadius < CEIL) {
+      usedRadius = Math.min(CEIL, usedRadius * 2);
+      var bigger = collect(usedRadius);
+      if (bigger.length > cand.length) cand = bigger;
+      if (bigger.length >= count) break;
+    }
+
+    render(cand, count, radius, usedRadius, budget,
+      { subs: Object.keys(exSubs).length, shops: Object.keys(EXCLUDED_SHOPS).length });
+  }
+
+  function weightedPick(pool, n) {
+    pool = pool.slice(); var chosen = [];
+    while (pool.length && chosen.length < n) {
+      var weights = pool.map(function (r) { return 1 / (r._dist + 50); });
+      var total = weights.reduce(function (a, b) { return a + b; }, 0);
+      var t = Math.random() * total, acc = 0, idx = 0;
+      for (var i = 0; i < pool.length; i++) { acc += weights[i]; if (t <= acc) { idx = i; break; } }
+      chosen.push(pool[idx]); pool.splice(idx, 1);
+    }
+    return chosen;
+  }
+
+  function render(cand, count, baseRadius, usedRadius, budget, ex) {
+    ex = ex || { subs: 0, shops: 0 };
+    var box = document.getElementById("results");
+    if (!cand.length) {
+      box.innerHTML =
+        '<div class="panel empty"><h3>조건에 맞는 식당이 없어요 😢</h3>' +
+        '<p>다음을 시도해 보세요:</p><ul style="text-align:left;display:inline-block;">' +
+        '<li>반경을 넓히기 (현재 ' + distLabel(usedRadius) + '까지 찾아봤어요)</li>' +
+        (budget ? '<li>예산 올리기 (현재 ' + won(budget) + ' 이하)</li>' : '') +
+        (ex.subs ? '<li>제외한 메뉴 종류 체크 줄이기 (현재 ' + ex.subs + '개)</li>' : '') +
+        (ex.shops ? '<li>제외한 가게 줄이기 (현재 ' + ex.shops + '곳)</li>' : '') +
+        '<li>먹고 싶은 종류를 더 켜기</li></ul></div>';
+      hideMap();
+      return;
+    }
+    var picks = weightedPick(cand, count);
+
+    var html = '<div class="panel"><div class="cards">';
+    picks.forEach(function (r, i) {
+      var q = encodeURIComponent(r.name + " " + (r.address || ""));
+      html +=
+        '<div class="restaurant"><div class="rank">' + (i+1) + '</div>' +
+        '<h3>' + esc(r.name) + '</h3>' +
+        '<div class="badges">' +
+          '<span class="badge">' + esc(r.category) + (r.sub ? " · " + esc(r.sub) : "") + '</span>' +
+          '<span class="badge price">~' + won(r.price_est) + ' (추정)</span>' +
+          '<span class="badge dist">' + distLabel(r._dist) + '</span>' +
+        '</div>' +
+        '<div class="addr">' + esc(r.address || "") + '</div>' +
+        '<div class="maplinks">' +
+          '<a href="https://map.kakao.com/?q=' + q + '" target="_blank" rel="noopener">카카오맵</a>' +
+          '<a href="https://map.naver.com/v5/search/' + q + '" target="_blank" rel="noopener">네이버지도</a>' +
+        '</div>' +
+        '<button class="ate" data-shop="' + esc(shopKey(r.name, r.address)) + '">🙅 이 가게 최근 먹음 (제외)</button>' +
+        '</div>';
+    });
+    var note = '후보 ' + cand.length + '곳 중 ' + picks.length + '곳 추천';
+    if (usedRadius > baseRadius) note += ' · 주변이 적어 반경을 ' + distLabel(usedRadius) + '로 넓혔어요';
+    if (picks.length < count) note += ' · 요청 ' + count + '곳보다 적어요 (주변 식당 부족)';
+    html += '</div><p class="note">' + note + '</p></div>';
+    box.innerHTML = html;
+
+    drawMap(picks);
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c];
+    });
+  }
+
+  // ---- 지도 (인터넷 연결 시) ----
+  function drawMap(picks) {
+    if (typeof L === "undefined") return; // Leaflet 미로딩(오프라인) → 건너뜀
+    var el = document.getElementById("map");
+    el.style.display = "block";
+    try {
+      if (!map) {
+        map = L.map("map").setView([center.lat, center.lon], 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19, attribution: "&copy; OpenStreetMap"
+        }).addTo(map);
+      } else {
+        map.setView([center.lat, center.lon], 15);
+      }
+      markers.forEach(function (m) { map.removeLayer(m); });
+      markers = [];
+      var me = L.circleMarker([center.lat, center.lon], { radius: 8, color: "#4ade80" })
+        .addTo(map).bindPopup("기준 위치");
+      markers.push(me);
+      picks.forEach(function (r, i) {
+        var mk = L.marker([r.lat, r.lon]).addTo(map)
+          .bindPopup("<b>" + (i+1) + ". " + esc(r.name) + "</b><br>" + esc(r.category));
+        markers.push(mk);
+      });
+      setTimeout(function () { map.invalidateSize(); }, 100);
+    } catch (e) {
+      el.style.display = "none";
+    }
+  }
+  function hideMap() { document.getElementById("map").style.display = "none"; }
+
+  // ---- 시작 ----
+  initControls();
+  document.getElementById("go").addEventListener("click", recommend);
+})();
+</script>
+</body>
+</html>

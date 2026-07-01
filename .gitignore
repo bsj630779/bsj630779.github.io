@@ -1,0 +1,7 @@
+# OMC 운영 상태 (배포 불필요)
+.omc/
+
+# OS/편집기 부산물
+.DS_Store
+Thumbs.db
+desktop.ini
