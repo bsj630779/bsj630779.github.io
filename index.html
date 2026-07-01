@@ -317,6 +317,12 @@
     };
   });
   var REGION = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.region) || "";
+  // 시군구 실제 식당 수 (샘플링 전 원본). 없으면 표본 수로 대체.
+  var COUNTS = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.counts) || {};
+  function realCount(sido, sigungu) {
+    var k = sido + "|" + sigungu;
+    return (COUNTS[k] != null) ? COUNTS[k] : (SG[k] ? SG[k].n : 0);
+  }
 
   var center = null;        // {lat, lon, label}
   var map = null, markers = [];
@@ -375,7 +381,9 @@
     });
 
     // 기본값 = 음식점이 가장 많은 시군구가 있는 시/도
-    var topKey = Object.keys(SG).sort(function (a, b) { return SG[b].n - SG[a].n; })[0];
+    var topKey = Object.keys(SG).sort(function (a, b) {
+      return (COUNTS[b] != null ? COUNTS[b] : SG[b].n) - (COUNTS[a] != null ? COUNTS[a] : SG[a].n);
+    })[0];
     sidoSel.value = SG[topKey].sido;
     fillSigungu(SG[topKey].sido);
     document.getElementById("sigungu").value = SG[topKey].sigungu;
@@ -474,7 +482,7 @@
     sel.innerHTML = "";
     (SIDO_MAP[sido] || []).slice().sort().forEach(function (g) {
       var o = document.createElement("option");
-      o.value = g; o.textContent = g + " (" + SG[sido + "|" + g].n + "곳)";
+      o.value = g; o.textContent = g + " (" + realCount(sido, g).toLocaleString() + "곳)";
       sel.appendChild(o);
     });
   }
