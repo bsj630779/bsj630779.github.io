@@ -308,7 +308,14 @@
 (function () {
   "use strict";
 
-  var DATA = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.restaurants) || [];
+  // data.js 는 모바일 대응을 위해 짧은 키(n,c,s,o,g,a,x,y,p)로 저장됨 → 원래 필드명으로 복원
+  var RAW = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.restaurants) || [];
+  var DATA = RAW.map(function (r) {
+    return {
+      name: r.n, category: r.c, sub: r.s, sido: r.o, sigungu: r.g,
+      address: r.a, lon: r.x, lat: r.y, price_est: r.p,
+    };
+  });
   var REGION = (window.RESTAURANT_DATA && window.RESTAURANT_DATA.region) || "";
 
   var center = null;        // {lat, lon, label}
