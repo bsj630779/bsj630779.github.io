@@ -328,6 +328,7 @@
   var map = null, markers = [];
   var DONGS = [];           // [{name, lat, lon, n}] — 현재 위치 → 최근접 행정동 찾기용
   var EXCLUDED_SHOPS = {};  // 최근 먹은 가게(상호명) 제외 목록 (localStorage 영속)
+  var shownKeys = {};       // 직전 클릭들에서 보여준 가게 — 소진 전까지 재추천 방지
 
   // ---- 유틸 ----
   function haversine(lat1, lon1, lat2, lon2) {
@@ -637,7 +638,12 @@
       hideMap();
       return;
     }
-    var picks = weightedPick(cand, count);
+    // 직전 클릭들에서 보여준 가게는 빼고 '신선한' 후보에서 우선 추천.
+    // 신선한 후보가 요청 개수보다 적으면(다 돌았으면) 기록을 리셋해 다시 순환.
+    var fresh = cand.filter(function (r) { return !shownKeys[shopKey(r.name, r.address)]; });
+    if (fresh.length < count) { shownKeys = {}; fresh = cand.slice(); }
+    var picks = weightedPick(fresh, count);
+    picks.forEach(function (p) { shownKeys[shopKey(p.name, p.address)] = true; });
 
     var html = '<div class="panel"><div class="cards">';
     picks.forEach(function (r, i) {
